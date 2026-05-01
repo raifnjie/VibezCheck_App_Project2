@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -68,4 +69,33 @@ class FirestoreService {
     final moodBonus = mood == 'hype' || mood == 'chill' ? 2 : 1;
     return (votes * 2) + moodBonus;
   }
+  Stream<QuerySnapshot> getMessagesStream() {
+    return _db
+        .collection('playlists')
+        .doc(defaultPlaylistId)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots();
+    }
+
+    Future<void> sendMessage(String text) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null || text.trim().isEmpty) {
+        return;
+    }
+
+    await createDefaultPlaylistIfMissing();
+
+    await _db
+        .collection('playlists')
+        .doc(defaultPlaylistId)
+        .collection('messages')
+        .add({
+        'text': text.trim(),
+        'senderId': user.uid,
+        'senderEmail': user.email ?? 'Unknown user',
+        'timestamp': FieldValue.serverTimestamp(),
+    });
+    }
 }
