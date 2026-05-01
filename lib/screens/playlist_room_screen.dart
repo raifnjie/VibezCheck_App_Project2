@@ -1,54 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../models/song.dart';
-import '../services/mock_data_service.dart';
+import '../services/firestore_service.dart';
 
-class PlaylistRoomScreen extends StatefulWidget {
-  const PlaylistRoomScreen({super.key});
+class PlaylistRoomScreen extends StatelessWidget {
+  PlaylistRoomScreen({super.key});
 
-  @override
-  State<PlaylistRoomScreen> createState() => _PlaylistRoomScreenState();
-}
+  final FirestoreService firestoreService = FirestoreService();
 
-class _PlaylistRoomScreenState extends State<PlaylistRoomScreen> {
-  late List<Song> songs;
+  List<QueryDocumentSnapshot> getTopRecommendations(
+    List<QueryDocumentSnapshot> songs,
+  ) {
+    final rankedSongs = List<QueryDocumentSnapshot>.from(songs);
 
-  @override
-  void initState() {
-    super.initState();
-    songs = List.from(MockDataService.songs);
-    _sortSongs();
-  }
+    rankedSongs.sort((a, b) {
+      final aData = a.data() as Map<String, dynamic>;
+      final bData = b.data() as Map<String, dynamic>;
 
-  void _sortSongs() {
-    songs.sort((a, b) => b.votes.compareTo(a.votes));
-  }
+      final aScore = firestoreService.calculateRecommendationScore(
+        votes: aData['votes'] ?? 0,
+        mood: aData['mood'] ?? '',
+      );
 
-  void _upvoteSong(Song song) {
-    setState(() {
-      song.votes++;
-      _sortSongs();
+      final bScore = firestoreService.calculateRecommendationScore(
+        votes: bData['votes'] ?? 0,
+        mood: bData['mood'] ?? '',
+      );
+
+      return bScore.compareTo(aScore);
     });
-  }
 
-  void _downvoteSong(Song song) {
-    setState(() {
-      song.votes--;
-      _sortSongs();
-    });
-  }
-
-  List<Song> get topRecommendations {
-    final rankedSongs = List<Song>.from(songs);
-    rankedSongs.sort(
-      (a, b) => b.recommendationScore.compareTo(a.recommendationScore),
-    );
     return rankedSongs.take(3).toList();
+  }
+
+  Future<void> changeVote({
+    required String songId,
+    required int currentVotes,
+    required int change,
+  }) async {
+    await firestoreService.updateSongVotes(
+      songId: songId,
+      currentVotes: currentVotes,
+      change: change,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final recommendations = topRecommendations;
+    firestoreService.createDefaultPlaylistIfMissing();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Playlist Room')),
@@ -63,63 +62,118 @@ class _PlaylistRoomScreenState extends State<PlaylistRoomScreen> {
               child: const Text('Add Song'),
             ),
             const SizedBox(height: 16),
-
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Recommended Next Songs',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            ...recommendations.map(
-              (song) => ListTile(
-                title: Text('${song.title} - ${song.artist}'),
-                subtitle: Text(
-                  'Mood: ${song.mood} | Score: ${song.recommendationScore}',
-                ),
-              ),
-            ),
-
-            const Divider(height: 32),
-
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Playlist Queue',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
             Expanded(
-              child: ListView.builder(
-                itemCount: songs.length,
-                itemBuilder: (context, index) {
-                  final song = songs[index];
+              child: StreamBuilder<QuerySnapshot>(
+                stream: firestoreService.getSongsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Error loading songs: ${snapshot.error}'),
+                    );
+                  }
 
-                  return Card(
-                    child: ListTile(
-                      title: Text('${song.title} - ${song.artist}'),
-                      subtitle: Text(
-                        'Votes: ${song.votes} | Mood: ${song.mood}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () => _upvoteSong(song),
-                            icon: const Icon(Icons.thumb_up),
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final songs = snapshot.data?.docs ?? [];
+
+                  if (songs.isEmpty) {
+                    return const Center(
+                      child: Text('No songs yet. Tap Add Song to start.'),
+                    );
+                  }
+
+                  final recommendations = getTopRecommendations(songs);
+
+                  return Column(
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Recommended Next Songs',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                          IconButton(
-                            onPressed: () => _downvoteSong(song),
-                            icon: const Icon(Icons.thumb_down),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+
+                      ...recommendations.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final votes = data['votes'] ?? 0;
+                        final mood = data['mood'] ?? '';
+                        final score =
+                            firestoreService.calculateRecommendationScore(
+                          votes: votes,
+                          mood: mood,
+                        );
+
+                        return ListTile(
+                          title: Text('${data['title']} - ${data['artist']}'),
+                          subtitle: Text('Mood: $mood | Score: $score'),
+                        );
+                      }),
+
+                      const Divider(height: 32),
+
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Playlist Queue',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: songs.length,
+                          itemBuilder: (context, index) {
+                            final doc = songs[index];
+                            final data = doc.data() as Map<String, dynamic>;
+
+                            final title = data['title'] ?? 'Untitled Song';
+                            final artist = data['artist'] ?? 'Unknown Artist';
+                            final mood = data['mood'] ?? 'none';
+                            final votes = data['votes'] ?? 0;
+
+                            return Card(
+                              child: ListTile(
+                                title: Text('$title - $artist'),
+                                subtitle: Text('Votes: $votes | Mood: $mood'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => changeVote(
+                                        songId: doc.id,
+                                        currentVotes: votes,
+                                        change: 1,
+                                      ),
+                                      icon: const Icon(Icons.thumb_up),
+                                    ),
+                                    IconButton(
+                                      onPressed: () => changeVote(
+                                        songId: doc.id,
+                                        currentVotes: votes,
+                                        change: -1,
+                                      ),
+                                      icon: const Icon(Icons.thumb_down),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),

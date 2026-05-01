@@ -1,18 +1,62 @@
 import 'package:flutter/material.dart';
 
+import '../services/firestore_service.dart';
+
 class SongSearchScreen extends StatelessWidget {
-  const SongSearchScreen({super.key});
+  SongSearchScreen({super.key});
+
+  final FirestoreService firestoreService = FirestoreService();
+
+  final List<Map<String, String>> results = const [
+    {
+      'title': 'Mock Song A',
+      'artist': 'Artist One',
+      'mood': 'chill',
+    },
+    {
+      'title': 'Mock Song B',
+      'artist': 'Artist Two',
+      'mood': 'hype',
+    },
+    {
+      'title': 'Mock Song C',
+      'artist': 'Artist Three',
+      'mood': 'focus',
+    },
+    {
+      'title': 'Mock Song D',
+      'artist': 'Artist Four',
+      'mood': 'party',
+    },
+    {
+      'title': 'Mock Song E',
+      'artist': 'Artist Five',
+      'mood': 'study',
+    },
+  ];
+
+  Future<void> addSong(BuildContext context, Map<String, String> song) async {
+    await firestoreService.addSong(
+      title: song['title']!,
+      artist: song['artist']!,
+      mood: song['mood']!,
+    );
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${song['title']} added to playlist')),
+    );
+
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final results = [
-      'Mock Song A - Artist One',
-      'Mock Song B - Artist Two',
-      'Mock Song C - Artist Three',
-    ];
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Song Search')),
+      appBar: AppBar(
+        title: const Text('Song Search'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -28,13 +72,14 @@ class SongSearchScreen extends StatelessWidget {
               child: ListView.builder(
                 itemCount: results.length,
                 itemBuilder: (context, index) {
+                  final song = results[index];
+
                   return Card(
                     child: ListTile(
-                      title: Text(results[index]),
+                      title: Text('${song['title']} - ${song['artist']}'),
+                      subtitle: Text('Mood: ${song['mood']}'),
                       trailing: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
+                        onPressed: () => addSong(context, song),
                         child: const Text('Add'),
                       ),
                     ),

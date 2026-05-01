@@ -34,14 +34,14 @@ class VibezCheckApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignupScreen(),
-        '/dashboard': (context) => const DashboardScreen(),
-        '/playlist': (context) => const PlaylistRoomScreen(),
-        '/song-search': (context) => const SongSearchScreen(),
-        '/settings': (context) => const SettingsScreen(),
-      },
+      '/': (context) => const SplashScreen(),
+      '/login': (context) => const LoginScreen(),
+      '/signup': (context) => const SignupScreen(),
+      '/dashboard': (context) => const DashboardScreen(),
+      '/playlist': (context) => PlaylistRoomScreen(),
+      '/song-search': (context) => SongSearchScreen(),
+      '/settings': (context) => const SettingsScreen(),
+    },
     );
   }
 }
